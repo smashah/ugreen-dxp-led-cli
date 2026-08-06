@@ -37,7 +37,7 @@ Usage: install.sh [options]
   --api-port PORT        API port (default: 9842).
   --no-enable            Do not enable the systemd service at boot.
   --no-start             Do not start the systemd service now.
-  --version TAG          Install backend from a release tag instead of latest.
+  --version TAG          Install every component from a release tag instead of latest.
 EOF
 }
 
@@ -114,12 +114,22 @@ if [ -n "$SOURCE_DIR" ]; then
     cp "$SOURCE_DIR/systemd/ugreen-led-api.service" "$temporary/ugreen-led-api.service"
   fi
 else
-  raw_base="https://raw.githubusercontent.com/$REPOSITORY/main"
-  download "$raw_base/led" "$temporary/led"
-  download "$raw_base/systemd/ugreen-led-mode.service" "$temporary/ugreen-led-mode.service"
+  if [ "$VERSION" = "latest" ]; then
+    source_base="https://github.com/$REPOSITORY/releases/latest/download"
+    source_mode_service="ugreen-led-mode.service"
+    source_api="ugreen_led_api.py"
+    source_api_service="ugreen-led-api.service"
+  else
+    source_base="https://raw.githubusercontent.com/$REPOSITORY/$VERSION"
+    source_mode_service="systemd/ugreen-led-mode.service"
+    source_api="api/ugreen_led_api.py"
+    source_api_service="systemd/ugreen-led-api.service"
+  fi
+  download "$source_base/led" "$temporary/led"
+  download "$source_base/$source_mode_service" "$temporary/ugreen-led-mode.service"
   if [ "$WITH_API" -eq 1 ]; then
-    download "$raw_base/api/ugreen_led_api.py" "$temporary/ugreen_led_api.py"
-    download "$raw_base/systemd/ugreen-led-api.service" "$temporary/ugreen-led-api.service"
+    download "$source_base/$source_api" "$temporary/ugreen_led_api.py"
+    download "$source_base/$source_api_service" "$temporary/ugreen-led-api.service"
   fi
 fi
 

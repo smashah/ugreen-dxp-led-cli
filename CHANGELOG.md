@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.3 - 2026-08-06
+
+- Pin the CLI, API, and systemd units alongside the backend when installing a tagged release.
+- Publish those source components as release assets so the default latest install is internally consistent.
+
 ## 0.3.2 - 2026-08-06
 
 - Use a continuous temperature gradient so healthy bays at different temperatures remain visually distinct.

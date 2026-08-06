@@ -25,6 +25,7 @@ cat > "$temporary/bin/ip" <<'EOF'
 printf 'default via 192.0.2.1 dev eno1 proto dhcp\n'
 EOF
 chmod +x "$temporary/bin/ip"
+ln -s "$repository_root/tests/fake-curl.sh" "$temporary/bin/curl"
 PATH="$temporary/bin:$PATH" \
 UGREEN_LED_INSTALL_SOURCE_DIR="$repository_root" \
 UGREEN_LED_BACKEND_SOURCE="$repository_root/tests/fake-backend.sh" \
@@ -62,5 +63,34 @@ grep -q '^UGREEN_LED_API_LISTEN=192.0.2.11$' \
   "$temporary/api-root/etc/ugreen-led-api.conf"
 grep -q '^UGREEN_LED_API_PORT=9988$' \
   "$temporary/api-root/etc/ugreen-led-api.conf"
+
+touch "$temporary/curl.log"
+PATH="$temporary/bin:$PATH" \
+UGREEN_LED_TEST_CURL_LOG="$temporary/curl.log" \
+UGREEN_LED_TEST_REPOSITORY_ROOT="$repository_root" \
+UGREEN_LED_BACKEND_SOURCE="$repository_root/tests/fake-backend.sh" \
+UGREEN_LED_DESTDIR="$temporary/version-root" \
+  "$repository_root/install.sh" --version v9.8.7 --with-api \
+  --no-start --no-enable >/dev/null
+test "$(wc -l < "$temporary/curl.log" | tr -d ' ')" = 4
+if grep -v '^https://raw.githubusercontent.com/smashah/ugreen-dxp-led-cli/v9.8.7/' \
+    "$temporary/curl.log"; then
+  printf 'installer fetched an unpinned source URL\n' >&2
+  exit 1
+fi
+
+: > "$temporary/curl.log"
+PATH="$temporary/bin:$PATH" \
+UGREEN_LED_TEST_CURL_LOG="$temporary/curl.log" \
+UGREEN_LED_TEST_REPOSITORY_ROOT="$repository_root" \
+UGREEN_LED_BACKEND_SOURCE="$repository_root/tests/fake-backend.sh" \
+UGREEN_LED_DESTDIR="$temporary/latest-root" \
+  "$repository_root/install.sh" --with-api --no-start --no-enable >/dev/null
+test "$(wc -l < "$temporary/curl.log" | tr -d ' ')" = 4
+if grep -v '^https://github.com/smashah/ugreen-dxp-led-cli/releases/latest/download/' \
+    "$temporary/curl.log"; then
+  printf 'installer fetched an unversioned latest source URL\n' >&2
+  exit 1
+fi
 
 printf 'installer tests passed\n'
