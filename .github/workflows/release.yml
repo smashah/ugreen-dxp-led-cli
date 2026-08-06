@@ -20,16 +20,21 @@ jobs:
         run: |
           mv ugreen_leds_cli ugreen_leds_cli-linux-amd64
           sha256sum ugreen_leds_cli-linux-amd64 > ugreen_leds_cli-linux-amd64.sha256
+          zip -r ugreen-dxp-led-cli-visual-manual.zip docs/manual -x '*/__pycache__/*'
+          sha256sum ugreen-dxp-led-cli-visual-manual.zip > ugreen-dxp-led-cli-visual-manual.zip.sha256
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: >-
           gh release create "$GITHUB_REF_NAME"
           led
+          uninstall.sh
           api/ugreen_led_api.py
           systemd/ugreen-led-mode.service
           systemd/ugreen-led-api.service
           ugreen_leds_cli-linux-amd64
           ugreen_leds_cli-linux-amd64.sha256
+          ugreen-dxp-led-cli-visual-manual.zip
+          ugreen-dxp-led-cli-visual-manual.zip.sha256
           --generate-notes
           --title "$GITHUB_REF_NAME"

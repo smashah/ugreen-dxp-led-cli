@@ -4,6 +4,35 @@ Friendly LED control for UGREEN DXP NAS systems running Debian or Proxmox. It gi
 
 This project wraps and pins the hardware controller from [miskcoo/ugreen_leds_controller](https://github.com/miskcoo/ugreen_leds_controller). That project did the I2C reverse-engineering; this repository adds the user-facing command, safe temporary effects, configuration, tests, and boot service.
 
+## Visual manual
+
+![UGREEN DXP LED temperature, health, notification, and network color meanings](docs/manual/00-color-map.webp)
+
+Every primary command family, shortcut, and lifecycle action has a matching
+visual card. The complete copyable
+manual and artwork regeneration instructions live in
+[`docs/manual`](docs/manual/README.md).
+
+<details>
+<summary><strong>Open all 17 command cards</strong></summary>
+
+| Setup and inspection | Persistent modes |
+| --- | --- |
+| [![Install](docs/manual/01-install.webp)](docs/manual/README.md#01--install) | [![Current mode](docs/manual/04-mode.webp)](docs/manual/README.md#04--current-mode) |
+| [![Status](docs/manual/02-status.webp)](docs/manual/README.md#02--status) | [![Resource mode](docs/manual/05-resources.webp)](docs/manual/README.md#05--resources) |
+| [![Colors](docs/manual/03-colors.webp)](docs/manual/README.md#03--colors) | [![Solid mode](docs/manual/06-solid.webp)](docs/manual/README.md#06--solid) |
+| [![Manual mode](docs/manual/07-manual.webp)](docs/manual/README.md#07--manual) | [![Off mode](docs/manual/08-off.webp)](docs/manual/README.md#08--off) |
+| [![Set LEDs](docs/manual/09-set.webp)](docs/manual/README.md#09--set-leds) | |
+
+| Effects and lifecycle | Effects and lifecycle |
+| --- | --- |
+| [![Rainbow](docs/manual/10-rainbow.webp)](docs/manual/README.md#10--rainbow) | [![Chase](docs/manual/11-chase.webp)](docs/manual/README.md#11--chase) |
+| [![Pulse](docs/manual/12-pulse.webp)](docs/manual/README.md#12--pulse) | [![Police](docs/manual/13-police.webp)](docs/manual/README.md#13--police) |
+| [![Random](docs/manual/14-random.webp)](docs/manual/README.md#14--random) | [![Identify](docs/manual/15-identify.webp)](docs/manual/README.md#15--identify) |
+| [![Help](docs/manual/16-help.webp)](docs/manual/README.md#16--help) | [![Uninstall](docs/manual/17-uninstall.webp)](docs/manual/README.md#17--uninstall) |
+
+</details>
+
 Tested on:
 
 - UGREEN DXP4800 Plus
@@ -200,13 +229,15 @@ file.
 Keep the saved configuration by default:
 
 ```sh
-sudo ./uninstall.sh
+curl -fsSL https://github.com/smashah/ugreen-dxp-led-cli/releases/latest/download/uninstall.sh | \
+  sudo bash
 ```
 
 Remove configuration and manual LED state too:
 
 ```sh
-sudo ./uninstall.sh --purge
+curl -fsSL https://github.com/smashah/ugreen-dxp-led-cli/releases/latest/download/uninstall.sh | \
+  sudo bash -s -- --purge
 ```
 
 ## Development

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.4 - 2026-08-06
+
+- Add a color-coded DXP4800 Plus visual manual covering every CLI command.
+- Add a reproducible Gemini illustration pipeline with deterministic command overlays.
+- Publish the complete visual manual and checksum as release assets.
+
 ## 0.3.3 - 2026-08-06
 
 - Pin the CLI, API, and systemd units alongside the backend when installing a tagged release.
