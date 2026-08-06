@@ -32,6 +32,7 @@ class ApiHttpTest(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.fake_led = Path(self.temporary.name) / "led"
         self.fake_log = Path(self.temporary.name) / "commands.log"
+        self.telemetry_file = Path(self.temporary.name) / "telemetry.env"
         os.environ["UGREEN_LED_FAKE_LOG"] = str(self.fake_log)
         self.fake_led.write_text(
             "#!/usr/bin/env bash\n"
@@ -58,7 +59,11 @@ class ApiHttpTest(unittest.TestCase):
         )
         os.chmod(self.fake_led, 0o755)
         self.server = self.api.create_server(
-            "127.0.0.1", 0, "test-token", str(self.fake_led)
+            "127.0.0.1",
+            0,
+            "test-token",
+            str(self.fake_led),
+            telemetry_file=str(self.telemetry_file),
         )
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
@@ -111,6 +116,122 @@ class ApiHttpTest(unittest.TestCase):
         self.assertEqual(200, status)
         self.assertEqual("mode: resources\nservice: active\n", body["led_status"])
         self.assertIsNone(body["active_effect"])
+
+    def test_unraid_telemetry_is_authenticated_validated_and_persisted(self):
+        telemetry = {
+            "source": "unraid",
+            "array": {
+                "state": "STARTED",
+                "health": "ONLINE",
+                "usage_percent": 61,
+            },
+            "disks": [
+                {
+                    "slot": 1,
+                    "name": "main",
+                    "device": "sdb",
+                    "temperature_c": 29,
+                    "status": "OK",
+                    "usage_percent": 61,
+                },
+                {
+                    "slot": 2,
+                    "name": "main2",
+                    "device": "sdc",
+                    "temperature_c": 43,
+                    "status": "OK",
+                    "usage_percent": 61,
+                },
+            ],
+        }
+
+        denied_status, denied = self.request(
+            "/v1/telemetry", method="POST", body=telemetry
+        )
+        status, body = self.request(
+            "/v1/telemetry",
+            token="test-token",
+            method="POST",
+            body=telemetry,
+        )
+        read_status, read_body = self.request(
+            "/v1/telemetry", token="test-token"
+        )
+
+        self.assertEqual(401, denied_status)
+        self.assertEqual({"error": "unauthorized"}, denied)
+        self.assertEqual(202, status)
+        self.assertTrue(body["accepted"])
+        self.assertEqual("unraid", body["telemetry"]["source"])
+        self.assertEqual(200, read_status)
+        self.assertTrue(read_body["fresh"])
+        self.assertEqual(43, read_body["telemetry"]["disks"][1]["temperature_c"])
+        persisted = self.telemetry_file.read_text()
+        self.assertIn("UGREEN_TELEMETRY_ARRAY_STATE=STARTED\n", persisted)
+        self.assertIn("UGREEN_TELEMETRY_DISK1_TEMP_C=29\n", persisted)
+        self.assertIn("UGREEN_TELEMETRY_DISK2_STATUS=OK\n", persisted)
+
+        reloaded_server = self.api.create_server(
+            "127.0.0.1",
+            0,
+            "test-token",
+            str(self.fake_led),
+            telemetry_file=str(self.telemetry_file),
+        )
+        reloaded_thread = threading.Thread(
+            target=reloaded_server.serve_forever, daemon=True
+        )
+        reloaded_thread.start()
+        original_base_url = self.base_url
+        self.base_url = f"http://127.0.0.1:{reloaded_server.server_port}"
+        try:
+            reloaded_status, reloaded = self.request(
+                "/v1/telemetry", token="test-token"
+            )
+        finally:
+            self.base_url = original_base_url
+            reloaded_server.shutdown()
+            reloaded_server.server_close()
+            reloaded_thread.join(timeout=2)
+        self.assertEqual(200, reloaded_status)
+        self.assertEqual(telemetry["array"], reloaded["telemetry"]["array"])
+
+    def test_telemetry_rejects_unsafe_or_duplicate_disk_data(self):
+        status, body = self.request(
+            "/v1/telemetry",
+            token="test-token",
+            method="POST",
+            body={
+                "source": "unraid",
+                "array": {"state": "STARTED", "health": "ONLINE"},
+                "disks": [
+                    {
+                        "slot": 1,
+                        "name": "main;touch /tmp/nope",
+                        "device": "sdb",
+                        "temperature_c": 150,
+                        "status": "OK",
+                    },
+                    {
+                        "slot": 1,
+                        "name": "main2",
+                        "device": "sdc",
+                        "temperature_c": 35,
+                        "status": "OK",
+                    },
+                ],
+            },
+        )
+
+        self.assertEqual(400, status)
+        self.assertIn(
+            body["error"],
+            {
+                "invalid_disk_name",
+                "temperature_c_must_be_0_to_100_or_null",
+                "disk_slots_must_be_unique",
+            },
+        )
 
     def test_effect_is_async_exclusive_and_cancellable(self):
         denied_status, _ = self.request(

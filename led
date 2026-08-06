@@ -11,6 +11,8 @@ DEFAULT_MODE="resources"
 DEFAULT_BRIGHTNESS=140
 DEFAULT_REFRESH_SECONDS=5
 DEFAULT_MANUAL_FILE="/var/lib/ugreen-led-cli/manual.tsv"
+DEFAULT_TELEMETRY_FILE="/run/ugreen-led-cli/telemetry.env"
+DEFAULT_TELEMETRY_TTL_SECONDS=90
 SERVICE_NAME="${UGREEN_LED_SERVICE:-ugreen-led-mode.service}"
 
 usage() {
@@ -35,7 +37,7 @@ Usage:
   led trick identify
 
 Persistent modes:
-  resources   Power/thermal, network, CPU, memory, I/O wait, and root usage.
+  resources   Unraid array/disk telemetry when fresh; host metrics otherwise.
   solid       One saved color for every configured LED.
   manual      Saved per-LED state created by 'led set'.
   off         Turn every configured LED off.
@@ -153,6 +155,8 @@ load_config() {
   TEMP_WARN_C=80
   TEMP_CRIT_C=90
   ROOT_PATH="/"
+  TELEMETRY_FILE="$DEFAULT_TELEMETRY_FILE"
+  TELEMETRY_TTL_SECONDS="$DEFAULT_TELEMETRY_TTL_SECONDS"
 
   if [ -f "$CONFIG_FILE" ]; then
     # shellcheck source=/dev/null
@@ -161,6 +165,7 @@ load_config() {
 
   BACKEND="${UGREEN_LED_BACKEND:-$BACKEND}"
   MANUAL_FILE="${UGREEN_LED_MANUAL_FILE:-$MANUAL_FILE}"
+  TELEMETRY_FILE="${UGREEN_LED_TELEMETRY_FILE:-$TELEMETRY_FILE}"
   validate_leds "$LEDS"
   validate_mode "$MODE"
   validate_uint_range "brightness" "$BRIGHTNESS" 0 255
@@ -168,6 +173,7 @@ load_config() {
   validate_uint_range "refresh interval" "$REFRESH_SECONDS" 1 3600
   validate_uint_range "temperature warning" "$TEMP_WARN_C" 20 120
   validate_uint_range "temperature critical" "$TEMP_CRIT_C" 20 120
+  validate_uint_range "telemetry TTL" "$TELEMETRY_TTL_SECONDS" 10 3600
   [ "$TEMP_CRIT_C" -gt "$TEMP_WARN_C" ] || die "TEMP_CRIT_C must be greater than TEMP_WARN_C"
   validate_interface "$INTERFACE"
   if [ -n "$VM_ID" ]; then
@@ -201,6 +207,8 @@ save_config() {
     printf 'TEMP_WARN_C=%s\n' "$TEMP_WARN_C"
     printf 'TEMP_CRIT_C=%s\n' "$TEMP_CRIT_C"
     printf 'ROOT_PATH=%q\n' "$ROOT_PATH"
+    printf 'TELEMETRY_FILE=%q\n' "$TELEMETRY_FILE"
+    printf 'TELEMETRY_TTL_SECONDS=%s\n' "$TELEMETRY_TTL_SECONDS"
   } > "$temporary"
   chmod 0644 "$temporary"
   mv "$temporary" "$CONFIG_FILE"
@@ -343,6 +351,91 @@ metric_color() {
   fi
 }
 
+load_telemetry() {
+  local key value now age slot
+  TELEMETRY_STATE=absent
+  [ -f "$TELEMETRY_FILE" ] || return 1
+  UGREEN_TELEMETRY_RECEIVED_AT=""
+  UGREEN_TELEMETRY_ARRAY_STATE=UNKNOWN
+  UGREEN_TELEMETRY_ARRAY_HEALTH=UNKNOWN
+  UGREEN_TELEMETRY_ARRAY_USAGE_PCT=""
+  for slot in 1 2 3 4; do
+    printf -v "UGREEN_TELEMETRY_DISK${slot}_PRESENT" '%s' 0
+    printf -v "UGREEN_TELEMETRY_DISK${slot}_TEMP_C" '%s' ""
+    printf -v "UGREEN_TELEMETRY_DISK${slot}_STATUS" '%s' MISSING
+    printf -v "UGREEN_TELEMETRY_DISK${slot}_USAGE_PCT" '%s' ""
+  done
+  while IFS='=' read -r key value; do
+    case "$key" in
+      UGREEN_TELEMETRY_RECEIVED_AT|UGREEN_TELEMETRY_ARRAY_STATE|UGREEN_TELEMETRY_ARRAY_HEALTH|UGREEN_TELEMETRY_ARRAY_USAGE_PCT|UGREEN_TELEMETRY_DISK[1-4]_PRESENT|UGREEN_TELEMETRY_DISK[1-4]_TEMP_C|UGREEN_TELEMETRY_DISK[1-4]_STATUS|UGREEN_TELEMETRY_DISK[1-4]_USAGE_PCT)
+        printf -v "$key" '%s' "$value"
+        ;;
+    esac
+  done < "$TELEMETRY_FILE"
+  if ! [[ "$UGREEN_TELEMETRY_RECEIVED_AT" =~ ^[0-9]+$ ]]; then
+    TELEMETRY_STATE=stale
+    return 2
+  fi
+  now="$(date +%s)"
+  age=$((now - UGREEN_TELEMETRY_RECEIVED_AT))
+  if [ "$age" -lt 0 ] || [ "$age" -gt "$TELEMETRY_TTL_SECONDS" ]; then
+    TELEMETRY_STATE=stale
+    return 2
+  fi
+  TELEMETRY_STATE=fresh
+  TELEMETRY_AGE_SECONDS="$age"
+  return 0
+}
+
+telemetry_temperature_color() {
+  local temperature="$1" status="$2" present="$3"
+  if [ "$present" != "1" ] || [ "$status" = "FAILED" ] || [ "$status" = "MISSING" ]; then
+    echo "255 0 0"
+  elif [[ "$temperature" =~ ^[0-9]+$ ]] && (( temperature >= 50 )); then
+    echo "255 0 0"
+  elif [ "$status" = "WARNING" ]; then
+    echo "255 96 0"
+  elif [ "$status" = "UNKNOWN" ]; then
+    echo "160 32 255"
+  elif ! [[ "$temperature" =~ ^[0-9]+$ ]]; then
+    echo "0 255 255"
+  elif (( temperature >= 45 )); then
+    echo "255 96 0"
+  elif (( temperature >= 40 )); then
+    echo "255 220 0"
+  elif (( temperature >= 30 )); then
+    echo "0 255 0"
+  else
+    echo "0 96 255"
+  fi
+}
+
+telemetry_brightness() {
+  local usage="$1"
+  if [[ "$usage" =~ ^[0-9]+$ ]] && [ "$usage" -le 100 ]; then
+    echo "$((100 + usage * 155 / 100))"
+  else
+    echo "$BRIGHTNESS"
+  fi
+}
+
+apply_telemetry_disks() {
+  local slot led present_var temp_var status_var usage_var present temperature status usage
+  local red green blue brightness
+  for slot in 1 2 3 4; do
+    led="disk$slot"
+    present_var="UGREEN_TELEMETRY_DISK${slot}_PRESENT"
+    temp_var="UGREEN_TELEMETRY_DISK${slot}_TEMP_C"
+    status_var="UGREEN_TELEMETRY_DISK${slot}_STATUS"
+    usage_var="UGREEN_TELEMETRY_DISK${slot}_USAGE_PCT"
+    present="${!present_var}" temperature="${!temp_var}"
+    status="${!status_var}" usage="${!usage_var:-$UGREEN_TELEMETRY_ARRAY_USAGE_PCT}"
+    read -r red green blue <<< "$(telemetry_temperature_color "$temperature" "$status" "$present")"
+    brightness="$(telemetry_brightness "$usage")"
+    resource_set_led "$led" "$red" "$green" "$blue" "$brightness"
+  done
+}
+
 cpu_sample() {
   local label user nice system idle iowait irq softirq steal guest guest_nice
   read -r label user nice system idle iowait irq softirq steal guest guest_nice < /proc/stat
@@ -435,12 +528,15 @@ resource_set_led() {
 }
 
 apply_resource_values() {
-  local cpu="$1" memory="$2" iowait="$3" root="$4" temperature="$5" speed="$6"
+  local cpu="$1" memory="$2" iowait="$3" root="$4" temperature="$5" speed="$6" telemetry_state="$7"
   local red green blue
 
-  if ! health_ok || (( temperature >= TEMP_CRIT_C )); then
+  if ! health_ok || (( temperature >= TEMP_CRIT_C )) ||
+    { [ "$telemetry_state" = fresh ] && { [ "$UGREEN_TELEMETRY_ARRAY_STATE" != STARTED ] || [[ "$UGREEN_TELEMETRY_ARRAY_HEALTH" =~ ^(FAULTED|OFFLINE)$ ]]; }; }; then
     resource_set_led power 255 0 0 255
-  elif (( temperature >= TEMP_WARN_C )); then
+  elif [ "$telemetry_state" = stale ] ||
+    { [ "$telemetry_state" = fresh ] && [[ "$UGREEN_TELEMETRY_ARRAY_HEALTH" =~ ^(DEGRADED|UNKNOWN)$ ]]; } ||
+    (( temperature >= TEMP_WARN_C )); then
     resource_set_led power 255 96 0 220
   else
     resource_set_led power 0 255 0 160
@@ -453,19 +549,27 @@ apply_resource_values() {
     resource_set_led netdev 255 0 0 255
   fi
 
-  read -r red green blue <<< "$(metric_color "$cpu")"
-  resource_set_led disk1 "$red" "$green" "$blue" "$BRIGHTNESS"
-  read -r red green blue <<< "$(metric_color "$memory")"
-  resource_set_led disk2 "$red" "$green" "$blue" "$BRIGHTNESS"
-  read -r red green blue <<< "$(metric_color "$iowait")"
-  resource_set_led disk3 "$red" "$green" "$blue" "$BRIGHTNESS"
-  read -r red green blue <<< "$(metric_color "$root")"
-  resource_set_led disk4 "$red" "$green" "$blue" "$BRIGHTNESS"
+  if [ "$telemetry_state" = fresh ]; then
+    apply_telemetry_disks
+  elif [ "$telemetry_state" = stale ]; then
+    for led in disk1 disk2 disk3 disk4; do
+      resource_set_led "$led" 0 96 255 60
+    done
+  else
+    read -r red green blue <<< "$(metric_color "$cpu")"
+    resource_set_led disk1 "$red" "$green" "$blue" "$BRIGHTNESS"
+    read -r red green blue <<< "$(metric_color "$memory")"
+    resource_set_led disk2 "$red" "$green" "$blue" "$BRIGHTNESS"
+    read -r red green blue <<< "$(metric_color "$iowait")"
+    resource_set_led disk3 "$red" "$green" "$blue" "$BRIGHTNESS"
+    read -r red green blue <<< "$(metric_color "$root")"
+    resource_set_led disk4 "$red" "$green" "$blue" "$BRIGHTNESS"
+  fi
 }
 
 run_resources() {
   local previous_total previous_idle previous_iowait current_total current_idle current_iowait
-  local total_delta idle_delta iowait_delta cpu_percent iowait_percent memory_usage root_usage temperature speed
+  local total_delta idle_delta iowait_delta cpu_percent iowait_percent memory_usage root_usage temperature speed telemetry_state
 
   if [ -n "${UGREEN_LED_TEST_CPU_PCT:-}" ] && [ -n "${UGREEN_LED_TEST_IOWAIT_PCT:-}" ]; then
     previous_total=0 previous_idle=0 previous_iowait=0
@@ -497,7 +601,14 @@ run_resources() {
     root_usage="${UGREEN_LED_TEST_ROOT_PCT:-$(root_percent)}"
     temperature="${UGREEN_LED_TEST_TEMP_C:-$(package_temperature)}"
     speed="$(network_speed)"
-    apply_resource_values "$cpu_percent" "$memory_usage" "$iowait_percent" "$root_usage" "$temperature" "$speed"
+    if load_telemetry; then
+      telemetry_state=fresh
+    elif [ "$TELEMETRY_STATE" = stale ]; then
+      telemetry_state=stale
+    else
+      telemetry_state=absent
+    fi
+    apply_resource_values "$cpu_percent" "$memory_usage" "$iowait_percent" "$root_usage" "$temperature" "$speed" "$telemetry_state"
 
     [ "${UGREEN_LED_ONCE:-0}" = "1" ] && break
     sleep "$REFRESH_SECONDS"

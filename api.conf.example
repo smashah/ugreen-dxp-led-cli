@@ -1,5 +1,6 @@
 UGREEN_LED_API_LISTEN=127.0.0.1
 UGREEN_LED_API_PORT=9842
 UGREEN_LED_API_TOKEN_FILE=/etc/ugreen-led-api.token
+UGREEN_LED_TELEMETRY_FILE=/run/ugreen-led-cli/telemetry.env
+UGREEN_LED_CONFIG=/etc/ugreen-led-cli.conf
 UGREEN_LED_COMMAND=/usr/local/bin/led
-

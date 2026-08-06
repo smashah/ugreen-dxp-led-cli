@@ -43,6 +43,12 @@ grep -q '^UGREEN_LED_API_LISTEN=192.0.2.10$' \
   "$temporary/api-root/etc/ugreen-led-api.conf"
 grep -q '^UGREEN_LED_API_PORT=9842$' \
   "$temporary/api-root/etc/ugreen-led-api.conf"
+grep -q '^UGREEN_LED_TELEMETRY_FILE=/run/ugreen-led-cli/telemetry.env$' \
+  "$temporary/api-root/etc/ugreen-led-api.conf"
+grep -q '^UGREEN_LED_CONFIG=/etc/ugreen-led-cli.conf$' \
+  "$temporary/api-root/etc/ugreen-led-api.conf"
+grep -q '^TELEMETRY_TTL_SECONDS=90$' \
+  "$temporary/api-root/etc/ugreen-led-cli.conf"
 test "$(stat -c '%a' "$temporary/api-root/etc/ugreen-led-api.token" 2>/dev/null || \
   stat -f '%Lp' "$temporary/api-root/etc/ugreen-led-api.token")" = 600
 test "$(wc -c < "$temporary/api-root/etc/ugreen-led-api.token" | tr -d ' ')" -ge 33

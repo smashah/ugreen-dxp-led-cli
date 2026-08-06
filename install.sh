@@ -197,6 +197,8 @@ if [ ! -e "$DESTDIR$CONFIG_PATH" ]; then
     printf 'SOLID_COLOR=%q\nSOLID_BRIGHTNESS=140\n' "160 32 255"
     printf 'INTERFACE=%q\nVM_ID=%q\nHEALTH_URL=%q\n' "$INTERFACE" "$VM_ID" "$HEALTH_URL"
     printf 'TEMP_WARN_C=80\nTEMP_CRIT_C=90\nROOT_PATH=/\n'
+    printf 'TELEMETRY_FILE=/run/ugreen-led-cli/telemetry.env\n'
+    printf 'TELEMETRY_TTL_SECONDS=90\n'
   } > "$DESTDIR$CONFIG_PATH"
   chmod 0644 "$DESTDIR$CONFIG_PATH"
 fi
@@ -210,6 +212,8 @@ if [ "$WITH_API" -eq 1 ]; then
       printf 'UGREEN_LED_API_PORT=%s\n' "$API_PORT"
       printf 'UGREEN_LED_API_TOKEN_FILE=%q\n' "$API_TOKEN_PATH"
       printf 'UGREEN_LED_COMMAND=%q\n' "$PREFIX/bin/led"
+      printf 'UGREEN_LED_TELEMETRY_FILE=/run/ugreen-led-cli/telemetry.env\n'
+      printf 'UGREEN_LED_CONFIG=%q\n' "$CONFIG_PATH"
     } > "$DESTDIR$API_CONFIG_PATH"
     chmod 0644 "$DESTDIR$API_CONFIG_PATH"
   else

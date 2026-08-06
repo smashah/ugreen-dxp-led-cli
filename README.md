@@ -106,6 +106,27 @@ curl -fsS "$api/v1/mode" \
   -d '{"mode":"solid","color":"cyan","brightness":140}'
 ```
 
+Unraid can push its array and four-bay state to the same authenticated API.
+The server timestamps and atomically persists the validated payload; resource
+mode picks it up without restarting either service:
+
+```sh
+curl -fsS "$api/v1/telemetry" \
+  -H "Authorization: Bearer $token" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "source":"unraid",
+    "array":{"state":"STARTED","health":"ONLINE","usage_percent":61},
+    "disks":[
+      {"slot":1,"name":"main","device":"sdb","temperature_c":34,"status":"OK","usage_percent":61},
+      {"slot":2,"name":"main2","device":"sdc","temperature_c":36,"status":"OK","usage_percent":61}
+    ]
+  }'
+
+curl -fsS "$api/v1/telemetry" \
+  -H "Authorization: Bearer $token"
+```
+
 Only one effect runs at a time. Notifications replace the current effect, which
 lets a monitoring alert take priority over a decorative animation:
 
@@ -138,18 +159,25 @@ journalctl -u ugreen-led-api.service
 
 ## Resource mode
 
-The default six LEDs provide a compact host dashboard:
+With fresh Unraid telemetry, the default six LEDs provide an array dashboard:
 
 | LED | Meaning |
 | --- | --- |
-| `power` | Green when the optional VM/URL checks and CPU temperature are healthy; orange on temperature warning; red on a failed health check or critical temperature. |
+| `power` | Green for a started/online array; orange for degraded or stale telemetry; red for a stopped/faulted array, failed VM/URL check, or critical host temperature. |
 | `netdev` | Link speed color when the default gateway answers; red when it does not. |
-| `disk1` | CPU usage. |
-| `disk2` | Memory usage. |
-| `disk3` | CPU I/O wait. |
-| `disk4` | Root filesystem usage. |
+| `disk1`–`disk4` | Corresponding Unraid bay temperature and health. Brightness rises with array usage. |
 
-Resource colors progress from green below 50%, through yellow and orange, to red at 90%. Network colors are green at 100 Mbps, blue at 1 Gbps, yellow at 2.5 Gbps, and white at 10 Gbps.
+Disk temperature colors are blue below 30°C, green from 30–39°C, yellow from
+40–44°C, orange from 45–49°C, and red at 50°C or above. A missing or failed
+disk is red, unknown health is purple, and unavailable temperature is cyan.
+Telemetry expires after 90 seconds by default; stale disk data becomes dim blue
+instead of continuing to claim a healthy temperature. Temporary effects and
+notifications preempt this display, then restore the latest telemetry state.
+
+Before the first telemetry payload, resource mode remains backward compatible:
+the disk LEDs show host CPU, memory, I/O wait, and root-filesystem usage.
+Network colors are green at 100 Mbps, blue at 1 Gbps, yellow at 2.5 Gbps, and
+white at 10 Gbps.
 
 ## Configuration
 
@@ -157,9 +185,13 @@ Edit `/etc/ugreen-led-cli.conf`, then restart the service:
 
 ```sh
 sudo systemctl restart ugreen-led-mode.service
+sudo systemctl restart ugreen-led-api.service
 ```
 
-The main settings are `MODE`, `BRIGHTNESS`, `REFRESH_SECONDS`, `INTERFACE`, `VM_ID`, `HEALTH_URL`, `TEMP_WARN_C`, and `TEMP_CRIT_C`. See [`config.example`](config.example) for the full file.
+The main settings are `MODE`, `BRIGHTNESS`, `REFRESH_SECONDS`, `INTERFACE`,
+`VM_ID`, `HEALTH_URL`, `TEMP_WARN_C`, `TEMP_CRIT_C`, `TELEMETRY_FILE`, and
+`TELEMETRY_TTL_SECONDS`. See [`config.example`](config.example) for the full
+file.
 
 ## Uninstall
 

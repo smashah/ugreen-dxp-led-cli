@@ -10,8 +10,8 @@ backend:
 
 test:
 	bash -n led install.sh uninstall.sh tests/*.sh
-	python3 -m py_compile api/ugreen_led_api.py tests/test_api.py
-	python3 -m unittest tests/test_api.py
+	python3 -m py_compile api/ugreen_led_api.py tests/test_api.py tests/test_telemetry_priority.py
+	python3 -m unittest tests/test_api.py tests/test_telemetry_priority.py
 	bash tests/smoke.sh
 	bash tests/install.sh
 

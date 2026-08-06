@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0 - 2026-08-06
+
+- Add authenticated `POST`/`GET /v1/telemetry` endpoints for Unraid array and disk data.
+- Render four bay temperatures and disk health in resource mode, with usage-based brightness.
+- Mark stale telemetry visibly and retain the previous host-metric display before telemetry arrives.
+- Keep notifications and temporary effects above telemetry in the display priority order.
+
 ## 0.2.0 - 2026-08-06
 
 - Add an optional token-authenticated HTTP API and hardened systemd service.

@@ -6,7 +6,9 @@ import re
 import signal
 import stat
 import subprocess
+import tempfile
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
@@ -33,6 +35,9 @@ NOTIFICATION_COLORS = {
     "critical": "red",
     "resolved": "green",
 }
+ARRAY_STATES = {"STARTED", "STOPPED", "STARTING", "STOPPING", "UNKNOWN"}
+ARRAY_HEALTH = {"ONLINE", "DEGRADED", "FAULTED", "OFFLINE", "UNKNOWN"}
+DISK_STATUS = {"OK", "WARNING", "FAILED", "MISSING", "STANDBY", "UNKNOWN"}
 
 
 class EffectRestoreError(RuntimeError):
@@ -51,6 +56,8 @@ class LedApiServer(ThreadingHTTPServer):
         max_request_workers=16,
         request_read_timeout=5,
         effect_stop_timeout=15,
+        telemetry_file="/run/ugreen-led-cli/telemetry.env",
+        telemetry_ttl_seconds=90,
     ):
         self.api_token = token
         self.led_command = led_command
@@ -60,7 +67,71 @@ class LedApiServer(ThreadingHTTPServer):
         self.effect_stop_timeout = effect_stop_timeout
         self.effect_process = None
         self.effect_description = None
+        self.telemetry_file = os.path.abspath(telemetry_file)
+        self.telemetry_ttl_seconds = telemetry_ttl_seconds
+        self.telemetry_lock = threading.Lock()
+        self.telemetry = self._load_telemetry()
         super().__init__(address, LedApiHandler)
+
+    def _load_telemetry(self):
+        try:
+            with open(self.telemetry_file, encoding="utf-8") as handle:
+                first_line = handle.readline().rstrip("\n")
+            prefix = "# UGREEN_TELEMETRY_JSON="
+            if not first_line.startswith(prefix):
+                return None
+            telemetry = json.loads(first_line.removeprefix(prefix))
+        except (OSError, ValueError, TypeError):
+            return None
+        if (
+            not isinstance(telemetry, dict)
+            or telemetry.get("source") != "unraid"
+            or isinstance(telemetry.get("received_at"), bool)
+            or not isinstance(telemetry.get("received_at"), int)
+            or not isinstance(telemetry.get("array"), dict)
+            or not isinstance(telemetry.get("disks"), list)
+        ):
+            return None
+        return telemetry
+
+    @staticmethod
+    def _atomic_write(path, content):
+        directory = os.path.dirname(path)
+        os.makedirs(directory, mode=0o700, exist_ok=True)
+        descriptor, temporary_path = tempfile.mkstemp(
+            prefix=".telemetry.", dir=directory, text=True
+        )
+        try:
+            with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+                handle.write(content)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.chmod(temporary_path, 0o600)
+            os.replace(temporary_path, path)
+        except BaseException:
+            try:
+                os.unlink(temporary_path)
+            except OSError:
+                pass
+            raise
+
+    def store_telemetry(self, telemetry):
+        environment = telemetry_environment(telemetry)
+        with self.telemetry_lock:
+            self._atomic_write(self.telemetry_file, environment)
+            self.telemetry = telemetry
+
+    def telemetry_status(self):
+        with self.telemetry_lock:
+            telemetry = None if self.telemetry is None else dict(self.telemetry)
+        if telemetry is None:
+            return {"fresh": False, "age_seconds": None, "telemetry": None}
+        age = int(time.time()) - telemetry["received_at"]
+        return {
+            "fresh": 0 <= age <= self.telemetry_ttl_seconds,
+            "age_seconds": age,
+            "telemetry": telemetry,
+        }
 
     def process_request(self, request, client_address):
         request.settimeout(self.request_read_timeout)
@@ -160,7 +231,7 @@ class LedApiServer(ThreadingHTTPServer):
 
 
 class LedApiHandler(BaseHTTPRequestHandler):
-    server_version = "ugreen-led-api/0.2"
+    server_version = "ugreen-led-api/0.3"
 
     def log_message(self, message, *args):
         return
@@ -207,9 +278,12 @@ class LedApiHandler(BaseHTTPRequestHandler):
         if self.path == "/v1/health":
             self.send_json(200, {"status": "ok"})
             return
-        if self.path == "/v1/status":
+        if self.path in {"/v1/status", "/v1/telemetry"}:
             if not self.authenticated():
                 self.send_json(401, {"error": "unauthorized"})
+                return
+            if self.path == "/v1/telemetry":
+                self.send_json(200, self.server.telemetry_status())
                 return
             try:
                 result = subprocess.run(
@@ -227,6 +301,7 @@ class LedApiHandler(BaseHTTPRequestHandler):
                 {
                     "led_status": result.stdout,
                     "active_effect": self.server.active_effect(),
+                    "telemetry": self.server.telemetry_status(),
                 },
             )
             return
@@ -235,12 +310,19 @@ class LedApiHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         if not self.require_authentication():
             return
-        if self.path not in {"/v1/effects", "/v1/notifications", "/v1/mode"}:
+        if self.path not in {
+            "/v1/effects",
+            "/v1/notifications",
+            "/v1/mode",
+            "/v1/telemetry",
+        }:
             self.send_json(404, {"error": "not_found"})
             return
         try:
             body = self.read_json()
-            if self.path == "/v1/effects":
+            if self.path == "/v1/telemetry":
+                telemetry = normalized_telemetry(body)
+            elif self.path == "/v1/effects":
                 arguments, description = effect_command(body)
             elif self.path == "/v1/notifications":
                 arguments, description = notification_command(body)
@@ -248,6 +330,14 @@ class LedApiHandler(BaseHTTPRequestHandler):
                 arguments, description = mode_command(body)
         except ValueError as error:
             self.send_json(400, {"error": str(error)})
+            return
+        if self.path == "/v1/telemetry":
+            try:
+                self.server.store_telemetry(telemetry)
+            except OSError:
+                self.send_json(500, {"error": "telemetry_persistence_failed"})
+                return
+            self.send_json(202, {"accepted": True, "telemetry": telemetry})
             return
         if self.path == "/v1/mode":
             with self.server.operation_lock:
@@ -390,6 +480,125 @@ def mode_command(body):
     )
 
 
+def optional_percentage(value, field):
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 100:
+        raise ValueError(f"{field}_must_be_0_to_100_or_null")
+    return value
+
+
+def telemetry_identifier(value, field):
+    value = str(value)
+    if not re.fullmatch(r"[A-Za-z0-9._:-]{1,32}", value):
+        raise ValueError(f"invalid_{field}")
+    return value
+
+
+def normalized_telemetry(body):
+    if body.get("source") != "unraid":
+        raise ValueError("telemetry_source_must_be_unraid")
+    array = body.get("array")
+    if not isinstance(array, dict):
+        raise ValueError("array_must_be_an_object")
+    array_state = str(array.get("state", "")).upper()
+    if array_state not in ARRAY_STATES:
+        raise ValueError("invalid_array_state")
+    array_health = str(array.get("health", "")).upper()
+    if array_health not in ARRAY_HEALTH:
+        raise ValueError("invalid_array_health")
+    normalized_array = {
+        "state": array_state,
+        "health": array_health,
+        "usage_percent": optional_percentage(
+            array.get("usage_percent"), "array_usage_percent"
+        ),
+    }
+    disks = body.get("disks")
+    if not isinstance(disks, list) or len(disks) > 4:
+        raise ValueError("disks_must_be_an_array_of_up_to_4_items")
+    slots = set()
+    normalized_disks = []
+    for disk in disks:
+        if not isinstance(disk, dict):
+            raise ValueError("disk_must_be_an_object")
+        slot = disk.get("slot")
+        if isinstance(slot, bool) or not isinstance(slot, int) or not 1 <= slot <= 4:
+            raise ValueError("disk_slot_must_be_1_to_4")
+        if slot in slots:
+            raise ValueError("disk_slots_must_be_unique")
+        slots.add(slot)
+        temperature = disk.get("temperature_c")
+        if temperature is not None and (
+            isinstance(temperature, bool)
+            or not isinstance(temperature, int)
+            or not 0 <= temperature <= 100
+        ):
+            raise ValueError("temperature_c_must_be_0_to_100_or_null")
+        status = str(disk.get("status", "")).upper()
+        if status not in DISK_STATUS:
+            raise ValueError("invalid_disk_status")
+        normalized_disks.append(
+            {
+                "slot": slot,
+                "name": telemetry_identifier(disk.get("name", ""), "disk_name"),
+                "device": telemetry_identifier(
+                    disk.get("device", "unknown"), "disk_device"
+                ),
+                "temperature_c": temperature,
+                "status": status,
+                "usage_percent": optional_percentage(
+                    disk.get("usage_percent"), "disk_usage_percent"
+                ),
+            }
+        )
+    normalized_disks.sort(key=lambda disk: disk["slot"])
+    return {
+        "source": "unraid",
+        "received_at": int(time.time()),
+        "array": normalized_array,
+        "disks": normalized_disks,
+    }
+
+
+def telemetry_environment(telemetry):
+    array = telemetry["array"]
+    lines = [
+        "# UGREEN_TELEMETRY_JSON="
+        + json.dumps(telemetry, separators=(",", ":")),
+        f"UGREEN_TELEMETRY_RECEIVED_AT={telemetry['received_at']}",
+        f"UGREEN_TELEMETRY_ARRAY_STATE={array['state']}",
+        f"UGREEN_TELEMETRY_ARRAY_HEALTH={array['health']}",
+        "UGREEN_TELEMETRY_ARRAY_USAGE_PCT="
+        + ("" if array["usage_percent"] is None else str(array["usage_percent"])),
+    ]
+    disks_by_slot = {disk["slot"]: disk for disk in telemetry["disks"]}
+    for slot in range(1, 5):
+        disk = disks_by_slot.get(slot)
+        prefix = f"UGREEN_TELEMETRY_DISK{slot}_"
+        if disk is None:
+            lines.extend(
+                [
+                    f"{prefix}PRESENT=0",
+                    f"{prefix}TEMP_C=",
+                    f"{prefix}STATUS=MISSING",
+                    f"{prefix}USAGE_PCT=",
+                ]
+            )
+            continue
+        lines.extend(
+            [
+                f"{prefix}PRESENT=1",
+                f"{prefix}TEMP_C="
+                + ("" if disk["temperature_c"] is None else str(disk["temperature_c"])),
+                f"{prefix}STATUS={disk['status']}",
+                f"{prefix}USAGE_PCT="
+                + ("" if disk["usage_percent"] is None else str(disk["usage_percent"])),
+            ]
+        )
+    return "\n".join(lines) + "\n"
+
+
 def create_server(listen_address, port, token, led_command, **server_options):
     return LedApiServer(
         (listen_address, port), token, led_command, **server_options
@@ -408,6 +617,24 @@ def read_token(token_file):
     return token
 
 
+def read_telemetry_ttl(config_file):
+    ttl = 90
+    try:
+        with open(config_file, encoding="utf-8") as handle:
+            for line in handle:
+                key, separator, value = line.partition("=")
+                if separator and key.strip() == "TELEMETRY_TTL_SECONDS":
+                    ttl = int(value.strip())
+                    break
+    except FileNotFoundError:
+        return ttl
+    except (OSError, ValueError) as error:
+        raise ValueError("cannot read TELEMETRY_TTL_SECONDS from LED config") from error
+    if not 10 <= ttl <= 3600:
+        raise ValueError("TELEMETRY_TTL_SECONDS must be from 10 to 3600")
+    return ttl
+
+
 def main():
     listen_address = os.environ.get("UGREEN_LED_API_LISTEN", "127.0.0.1")
     try:
@@ -420,6 +647,16 @@ def main():
         "UGREEN_LED_API_TOKEN_FILE", "/etc/ugreen-led-api.token"
     )
     led_command = os.environ.get("UGREEN_LED_COMMAND", "/usr/local/bin/led")
+    telemetry_file = os.environ.get(
+        "UGREEN_LED_TELEMETRY_FILE", "/run/ugreen-led-cli/telemetry.env"
+    )
+    cli_config_file = os.environ.get(
+        "UGREEN_LED_CONFIG", "/etc/ugreen-led-cli.conf"
+    )
+    try:
+        telemetry_ttl_seconds = read_telemetry_ttl(cli_config_file)
+    except ValueError as error:
+        raise SystemExit(str(error)) from error
     try:
         token = read_token(token_file)
     except (OSError, ValueError) as error:
@@ -427,7 +664,14 @@ def main():
     if not os.path.isfile(led_command) or not os.access(led_command, os.X_OK):
         raise SystemExit(f"led command is missing or not executable: {led_command}")
 
-    server = create_server(listen_address, port, token, led_command)
+    server = create_server(
+        listen_address,
+        port,
+        token,
+        led_command,
+        telemetry_file=telemetry_file,
+        telemetry_ttl_seconds=telemetry_ttl_seconds,
+    )
 
     def stop_service(_signum, _frame):
         raise KeyboardInterrupt
