@@ -216,18 +216,18 @@ require_root_for_write() {
 }
 
 with_lock() {
-  local lock_directory
+  local lock_directory command_status
   lock_directory="$(dirname "$LOCK_FILE")"
   mkdir -p "$lock_directory"
-  (
-    exec 9>"$LOCK_FILE"
-    if command -v flock >/dev/null 2>&1; then
-      flock 9
-    else
-      warn "flock not found; continuing without process lock"
-    fi
-    "$@"
-  )
+  exec 9>"$LOCK_FILE"
+  if command -v flock >/dev/null 2>&1; then
+    flock 9
+  else
+    warn "flock not found; continuing without process lock"
+  fi
+  if "$@"; then command_status=0; else command_status=$?; fi
+  exec 9>&-
+  return "$command_status"
 }
 
 backend_status() {
