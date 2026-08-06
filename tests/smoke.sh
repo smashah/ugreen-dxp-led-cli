@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+[ "${CI:-}" != "true" ] || set -x
 
 repository_root="$(cd "$(dirname "$0")/.." && pwd)"
 temporary="$(mktemp -d "${TMPDIR:-/tmp}/ugreen-led-test.XXXXXX")"
