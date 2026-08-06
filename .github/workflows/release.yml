@@ -1,0 +1,32 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test
+        run: make test
+      - name: Build static backend
+        run: make backend
+      - name: Prepare checksummed asset
+        run: |
+          mv ugreen_leds_cli ugreen_leds_cli-linux-amd64
+          sha256sum ugreen_leds_cli-linux-amd64 > ugreen_leds_cli-linux-amd64.sha256
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "$GITHUB_REF_NAME"
+          ugreen_leds_cli-linux-amd64
+          ugreen_leds_cli-linux-amd64.sha256
+          --generate-notes
+          --title "$GITHUB_REF_NAME"
+

@@ -1,0 +1,16 @@
+# UGREEN DXP LED CLI config
+BACKEND=/usr/local/libexec/ugreen_leds_cli
+LEDS="power netdev disk1 disk2 disk3 disk4"
+MODE=resources
+BRIGHTNESS=140
+REFRESH_SECONDS=5
+MANUAL_FILE=/var/lib/ugreen-led-cli/manual.tsv
+SOLID_COLOR="160 32 255"
+SOLID_BRIGHTNESS=140
+INTERFACE=
+VM_ID=
+HEALTH_URL=
+TEMP_WARN_C=80
+TEMP_CRIT_C=90
+ROOT_PATH=/
+
