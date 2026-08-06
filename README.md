@@ -122,4 +122,3 @@ Release builds compile the backend from the pinned source documented in [`VENDOR
 ## Credits
 
 Hardware access comes from [miskcoo/ugreen_leds_controller](https://github.com/miskcoo/ugreen_leds_controller), used under the MIT License. Please credit that project for the controller work.
-

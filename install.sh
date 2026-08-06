@@ -51,6 +51,14 @@ done
 [ -z "$VM_ID" ] || [[ "$VM_ID" =~ ^[0-9]+$ ]] || die "VM ID must be numeric"
 [ -z "$HEALTH_URL" ] || [[ "$HEALTH_URL" =~ ^https?:// ]] || die "health URL must use HTTP or HTTPS"
 
+if [ -z "$INTERFACE" ] && command -v ip >/dev/null 2>&1; then
+  INTERFACE="$(ip route show default 2>/dev/null | awk 'NR == 1 {
+    for (field = 1; field <= NF; field++) {
+      if ($field == "dev") { print $(field + 1); exit }
+    }
+  }')"
+fi
+
 if [ -z "$DESTDIR" ] && [ "$(id -u)" -ne 0 ]; then
   die "run as root, for example: curl -fsSL https://raw.githubusercontent.com/$REPOSITORY/main/install.sh | sudo bash"
 fi

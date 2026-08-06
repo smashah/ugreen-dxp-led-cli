@@ -29,7 +29,7 @@ int ugreen_leds_t::start() {
 }
 
 static int compute_checksum(const std::vector<uint8_t>& data, int size) {
-    if (size < 2 || size > (int)data.size()) 
+    if (size < 2 || size > (int)data.size())
         return 0;
 
     int sum = 0;
@@ -58,7 +58,7 @@ ugreen_leds_t::led_data_t ugreen_leds_t::get_status(led_type_t id) {
     data.is_available = false;
 
     auto raw_data = _i2c.read_block_data(0x81 + (uint8_t)id, 0xb);
-    if (raw_data.size() != 0xb || !verify_checksum(raw_data)) 
+    if (raw_data.size() != 0xb || !verify_checksum(raw_data))
         return data;
 
     switch (raw_data[0]) {
@@ -88,12 +88,12 @@ int ugreen_leds_t::_change_status(led_type_t id, uint8_t command, std::array<std
     //   3c    3b    3a
         0x00, 0xa0, 0x01,
     //     39        38         37
-        0x00, 0x00, command, 
+        0x00, 0x00, command,
     //     36 - 33
-        params[0].value_or(0x00), 
-        params[1].value_or(0x00), 
-        params[2].value_or(0x00), 
-        params[3].value_or(0x00), 
+        params[0].value_or(0x00),
+        params[1].value_or(0x00),
+        params[2].value_or(0x00),
+        params[3].value_or(0x00),
     };
 
     append_checksum(data);
@@ -109,9 +109,9 @@ int ugreen_leds_t::set_onoff(led_type_t id, uint8_t status) {
 int ugreen_leds_t::_set_blink_or_breath(uint8_t command, led_type_t id, uint16_t t_on, uint16_t t_off) {
     uint16_t t_hight = t_on + t_off;
     uint16_t t_low = t_on;
-    return _change_status(id, command, { 
-        (uint8_t)(t_hight >> 8), 
-        (uint8_t)(t_hight & 0xff), 
+    return _change_status(id, command, {
+        (uint8_t)(t_hight >> 8),
+        (uint8_t)(t_hight & 0xff),
         (uint8_t)(t_low >> 8),
         (uint8_t)(t_low & 0xff),
     } );

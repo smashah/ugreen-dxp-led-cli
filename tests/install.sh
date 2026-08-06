@@ -19,5 +19,17 @@ grep -q '^i2c-dev$' "$temporary/root/etc/modules-load.d/ugreen-led-cli.conf"
 grep -q '^ExecStart=/usr/local/bin/led daemon$' \
   "$temporary/root/etc/systemd/system/ugreen-led-mode.service"
 
-printf 'installer tests passed\n'
+mkdir -p "$temporary/bin"
+cat > "$temporary/bin/ip" <<'EOF'
+#!/usr/bin/env bash
+printf 'default via 192.0.2.1 dev eno1 proto dhcp\n'
+EOF
+chmod +x "$temporary/bin/ip"
+PATH="$temporary/bin:$PATH" \
+UGREEN_LED_INSTALL_SOURCE_DIR="$repository_root" \
+UGREEN_LED_BACKEND_SOURCE="$repository_root/tests/fake-backend.sh" \
+UGREEN_LED_DESTDIR="$temporary/autodetect-root" \
+  "$repository_root/install.sh" --no-start --no-enable >/dev/null
+grep -q '^INTERFACE=eno1$' "$temporary/autodetect-root/etc/ugreen-led-cli.conf"
 
+printf 'installer tests passed\n'

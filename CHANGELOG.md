@@ -7,4 +7,3 @@
 - Restore the exact prior LED state after temporary effects, including Ctrl-C.
 - Add a systemd installer with conflicting UGREEN LED service detection.
 - Vendor and pin the low-level UGREEN I2C controller backend.
-

@@ -16,4 +16,3 @@ test:
 clean:
 	$(MAKE) -C $(BACKEND_DIR) clean
 	rm -f ugreen_leds_cli
-

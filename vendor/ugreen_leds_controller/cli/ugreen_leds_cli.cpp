@@ -68,12 +68,14 @@ void show_leds_info(ugreen_leds_t &leds_controller, const std::vector<led_type_p
         };
 
         std::printf("%s: status = %s, brightness = %d, color = RGB(%d, %d, %d)",
-                led.first.c_str(), op_mode_txt.c_str(), (int)data.brightness, 
+                led.first.c_str(), op_mode_txt.c_str(), (int)data.brightness,
                 (int)data.color_r, (int)data.color_g, (int)data.color_b);
 
-        if (data.op_mode == ugreen_leds_t::op_mode_t::blink) {
-            std::printf(", blink_on = %d ms, blink_off = %d ms",
-                    (int)data.t_on, (int)data.t_off);
+        if (data.op_mode == ugreen_leds_t::op_mode_t::blink ||
+                data.op_mode == ugreen_leds_t::op_mode_t::breath) {
+            const char *mode = data.op_mode == ugreen_leds_t::op_mode_t::blink ? "blink" : "breath";
+            std::printf(", %s_on = %d ms, %s_off = %d ms", mode,
+                    (int)data.t_on, mode, (int)data.t_off);
         }
 
         std::puts("");
@@ -81,7 +83,7 @@ void show_leds_info(ugreen_leds_t &leds_controller, const std::vector<led_type_p
 }
 
 void show_help() {
-    std::cerr 
+    std::cerr
         << "Usage: ugreen_leds_cli  [LED-NAME...] [-on] [-off] [-(blink|breath) T_ON T_OFF]\n"
            "                    [-color R G B] [-brightness BRIGHTNESS] [-status]\n\n"
            "       LED_NAME:    separated by white space, possible values are\n"
@@ -263,16 +265,16 @@ int main(int argc, char *argv[])
             for (int retry_cnt = 0; retry_cnt < MAX_RETRY_COUNT && last_status != 0; ++retry_cnt) {
 
                 if (retry_cnt == 0) {
-                    if (is_modification) 
+                    if (is_modification)
                         usleep(USLEEP_MODIFICATION_INTERVAL);  // usleep_range(200, 0x5dc)
                 } else {
-                    usleep(USLEEP_MODIFICATION_RETRY_INTERVAL);  
+                    usleep(USLEEP_MODIFICATION_RETRY_INTERVAL);
                 }
 
                 last_status = fn(led);
 
                 if (last_status == 0 && is_modification) {
-                    usleep(USLEEP_MODIFICATION_QUERY_RESULT_INTERVAL);  
+                    usleep(USLEEP_MODIFICATION_QUERY_RESULT_INTERVAL);
                     last_status = !leds_controller.is_last_modification_successful();
                 }
             }
@@ -283,8 +285,7 @@ int main(int argc, char *argv[])
             }
         }
     }
-    
+
 
     return 0;
 }
-

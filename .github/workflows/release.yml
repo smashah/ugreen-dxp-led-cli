@@ -29,4 +29,3 @@ jobs:
           ugreen_leds_cli-linux-amd64.sha256
           --generate-notes
           --title "$GITHUB_REF_NAME"
-

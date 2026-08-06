@@ -18,4 +18,3 @@ jobs:
         run: |
           test -x ugreen_leds_cli
           file ugreen_leds_cli | grep -q 'statically linked'
-
