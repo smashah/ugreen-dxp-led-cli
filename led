@@ -29,7 +29,7 @@ Usage:
   led set all 255,0,255
   led trick rainbow [15s]
   led trick chase [15s] [color]
-  led trick pulse [15s] [color]
+  led trick pulse [15s|forever] [color]
   led trick police [15s]
   led trick random [15s]
   led trick identify
@@ -41,7 +41,8 @@ Persistent modes:
   off         Turn every configured LED off.
 
 Temporary tricks restore the previous LED state and service mode on exit,
-including Ctrl-C. Durations default to 15 seconds and are capped at 300 seconds.
+including Ctrl-C. Durations default to 15 seconds, are capped at 300 seconds,
+or may be 'forever' when another process will cancel the alert.
 EOF
 }
 
@@ -645,6 +646,10 @@ set_manual_leds() {
 
 parse_duration() {
   local input="${1:-15}"
+  if [ "$input" = "forever" ]; then
+    echo 0
+    return
+  fi
   input="${input%s}"
   validate_uint_range "trick duration" "$input" 1 300
   echo "$input"
@@ -654,6 +659,8 @@ trick_continue() {
   local start="$1" duration="$2" step="$3"
   if [ -n "${UGREEN_LED_TRICK_STEPS:-}" ]; then
     [ "$step" -lt "$UGREEN_LED_TRICK_STEPS" ]
+  elif [ "$duration" -eq 0 ]; then
+    return 0
   else
     [ "$(( $(date +%s) - start ))" -lt "$duration" ]
   fi

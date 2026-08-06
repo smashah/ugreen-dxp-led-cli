@@ -31,6 +31,9 @@ cp "$UGREEN_LED_FAKE_STATE" "$temporary/before-trick.tsv"
 UGREEN_LED_TRICK_STEPS=2 UGREEN_LED_TEST_NO_SLEEP=1 \
   "$repository_root/led" trick rainbow 15s >/dev/null
 cmp "$temporary/before-trick.tsv" "$UGREEN_LED_FAKE_STATE"
+UGREEN_LED_TRICK_STEPS=1 UGREEN_LED_TEST_NO_SLEEP=1 \
+  "$repository_root/led" trick pulse forever red >/dev/null
+cmp "$temporary/before-trick.tsv" "$UGREEN_LED_FAKE_STATE"
 
 UGREEN_LED_TEST_CPU_PCT=20 UGREEN_LED_TEST_MEMORY_PCT=55 \
 UGREEN_LED_TEST_IOWAIT_PCT=80 UGREEN_LED_TEST_ROOT_PCT=91 \

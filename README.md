@@ -26,6 +26,14 @@ curl -fsSL https://raw.githubusercontent.com/smashah/ugreen-dxp-led-cli/main/ins
   sudo bash -s -- --interface enp6s0 --vm-id 504 --health-url https://192.168.1.27/
 ```
 
+Install the optional authenticated API when a VM or monitoring service needs
+to control the LEDs. Bind it to the host's specific LAN address:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/smashah/ugreen-dxp-led-cli/main/install.sh | \
+  sudo bash -s -- --with-api --api-listen 192.168.1.10
+```
+
 The installer refuses to run alongside known UGREEN LED services. Once you have a rollback copy of their configuration, replace them explicitly:
 
 ```sh
@@ -64,11 +72,69 @@ led trick pulse 30s purple
 led trick police 10s
 led trick random 15s
 led identify
+led trick pulse forever red
 ```
 
-Tricks run for 15 seconds by default and accept durations from 1 to 300 seconds. The command stops the persistent LED service, snapshots the current lights, runs the effect, restores the snapshot, and restarts the service if it was active. Ctrl-C follows the same restore path.
+Tricks run for 15 seconds by default and accept durations from 1 to 300 seconds. `forever` runs until Ctrl-C or an API cancellation. The command stops the persistent LED service, snapshots the current lights, runs the effect, restores the snapshot, and restarts the service if it was active. Interruption follows the same restore path.
 
 Colors can be named, `#RRGGBB`, or `R,G,B`. Run `led colors` for the built-in palette.
+
+## HTTP API
+
+The API uses Python's standard library and has no runtime package dependencies.
+`/v1/health` is public; every control and status endpoint requires the bearer
+token stored in `/etc/ugreen-led-api.token` with mode `0600`.
+
+```sh
+token=$(sudo cat /etc/ugreen-led-api.token)
+api=http://192.168.1.10:9842
+
+curl -fsS "$api/v1/status" \
+  -H "Authorization: Bearer $token"
+
+curl -fsS "$api/v1/effects" \
+  -H "Authorization: Bearer $token" \
+  -H 'Content-Type: application/json' \
+  -d '{"effect":"rainbow","duration":"15s"}'
+
+curl -fsS -X DELETE "$api/v1/effects/current" \
+  -H "Authorization: Bearer $token"
+
+curl -fsS "$api/v1/mode" \
+  -H "Authorization: Bearer $token" \
+  -H 'Content-Type: application/json' \
+  -d '{"mode":"solid","color":"cyan","brightness":140}'
+```
+
+Only one effect runs at a time. Notifications replace the current effect, which
+lets a monitoring alert take priority over a decorative animation:
+
+```sh
+# NUT: utility power was lost. Pulse red until recovery clears it.
+curl -fsS "$api/v1/notifications" \
+  -H "Authorization: Bearer $token" \
+  -H 'Content-Type: application/json' \
+  -d '{"level":"critical","message":"UPS on battery","duration":"forever"}'
+
+# NUT: utility power returned. Replace red with a 10-second green pulse.
+curl -fsS "$api/v1/notifications" \
+  -H "Authorization: Bearer $token" \
+  -H 'Content-Type: application/json' \
+  -d '{"level":"resolved","message":"Utility power restored","duration":"10s"}'
+```
+
+Notification levels map to blue (`info`), orange (`warning`), red (`critical`),
+and green (`resolved`). Messages are written to the API service journal and are
+never interpreted as commands.
+
+The API is plain HTTP because it is intended for a trusted host-only or LAN
+network. Bind to a specific address, keep port `9842` behind the host firewall,
+and use a TLS reverse proxy or VPN before exposing it beyond that network.
+
+```sh
+systemctl status ugreen-led-api.service
+journalctl -u ugreen-led-api.service
+```
 
 ## Resource mode
 

@@ -32,4 +32,29 @@ UGREEN_LED_DESTDIR="$temporary/autodetect-root" \
   "$repository_root/install.sh" --no-start --no-enable >/dev/null
 grep -q '^INTERFACE=eno1$' "$temporary/autodetect-root/etc/ugreen-led-cli.conf"
 
+UGREEN_LED_INSTALL_SOURCE_DIR="$repository_root" \
+UGREEN_LED_BACKEND_SOURCE="$repository_root/tests/fake-backend.sh" \
+UGREEN_LED_DESTDIR="$temporary/api-root" \
+  "$repository_root/install.sh" --with-api --api-listen 192.0.2.10 \
+  --api-port 9842 --no-start --no-enable >/dev/null
+test -x "$temporary/api-root/usr/local/libexec/ugreen_led_api.py"
+test -f "$temporary/api-root/etc/systemd/system/ugreen-led-api.service"
+grep -q '^UGREEN_LED_API_LISTEN=192.0.2.10$' \
+  "$temporary/api-root/etc/ugreen-led-api.conf"
+grep -q '^UGREEN_LED_API_PORT=9842$' \
+  "$temporary/api-root/etc/ugreen-led-api.conf"
+test "$(stat -c '%a' "$temporary/api-root/etc/ugreen-led-api.token" 2>/dev/null || \
+  stat -f '%Lp' "$temporary/api-root/etc/ugreen-led-api.token")" = 600
+test "$(wc -c < "$temporary/api-root/etc/ugreen-led-api.token" | tr -d ' ')" -ge 33
+
+UGREEN_LED_INSTALL_SOURCE_DIR="$repository_root" \
+UGREEN_LED_BACKEND_SOURCE="$repository_root/tests/fake-backend.sh" \
+UGREEN_LED_DESTDIR="$temporary/api-root" \
+  "$repository_root/install.sh" --with-api --api-listen 192.0.2.11 \
+  --api-port 9988 --no-start --no-enable >/dev/null
+grep -q '^UGREEN_LED_API_LISTEN=192.0.2.11$' \
+  "$temporary/api-root/etc/ugreen-led-api.conf"
+grep -q '^UGREEN_LED_API_PORT=9988$' \
+  "$temporary/api-root/etc/ugreen-led-api.conf"
+
 printf 'installer tests passed\n'

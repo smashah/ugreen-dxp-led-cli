@@ -1,0 +1,31 @@
+[Unit]
+Description=UGREEN DXP LED authenticated HTTP API
+After=network-online.target ugreen-led-mode.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/ugreen-led-api.conf
+ExecStart=/usr/bin/python3 /usr/local/libexec/ugreen_led_api.py
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=10
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=true
+ProtectControlGroups=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target
