@@ -77,9 +77,9 @@ UGREEN_LED_TEST_GATEWAY=1 UGREEN_LED_TEST_HEALTH=1 UGREEN_LED_ONCE=1 \
   "$repository_root/led" mode resources >/dev/null
 grep -q $'^power\ton\t160\t0\t255\t0\t0\t0$' "$UGREEN_LED_FAKE_STATE"
 grep -q $'^disk1\ton\t115\t0\t96\t255\t0\t0$' "$UGREEN_LED_FAKE_STATE"
-grep -q $'^disk2\ton\t177\t0\t255\t0\t400\t800$' "$UGREEN_LED_FAKE_STATE"
-grep -q $'^disk3\ton\t224\t255\t220\t0\t0\t0$' "$UGREEN_LED_FAKE_STATE"
-grep -q $'^disk4\ton\t255\t255\t96\t0\t0\t0$' "$UGREEN_LED_FAKE_STATE"
+grep -q $'^disk2\ton\t177\t0\t255\t51\t400\t800$' "$UGREEN_LED_FAKE_STATE"
+grep -q $'^disk3\ton\t224\t255\t145\t0\t0\t0$' "$UGREEN_LED_FAKE_STATE"
+grep -q $'^disk4\ton\t255\t255\t58\t0\t0\t0$' "$UGREEN_LED_FAKE_STATE"
 
 sed -e 's/^UGREEN_TELEMETRY_DISK1_TEMP_C=.*/UGREEN_TELEMETRY_DISK1_TEMP_C=55/' \
   -e 's/^UGREEN_TELEMETRY_DISK1_STATUS=.*/UGREEN_TELEMETRY_DISK1_STATUS=WARNING/' \

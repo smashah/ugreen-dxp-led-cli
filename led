@@ -388,7 +388,7 @@ load_telemetry() {
 }
 
 telemetry_temperature_color() {
-  local temperature="$1" status="$2" present="$3"
+  local temperature="$1" status="$2" present="$3" red green blue
   if [ "$present" != "1" ] || [ "$status" = "FAILED" ] || [ "$status" = "MISSING" ]; then
     echo "255 0 0"
   elif [[ "$temperature" =~ ^[0-9]+$ ]] && (( temperature >= 50 )); then
@@ -399,14 +399,20 @@ telemetry_temperature_color() {
     echo "160 32 255"
   elif ! [[ "$temperature" =~ ^[0-9]+$ ]]; then
     echo "0 255 255"
-  elif (( temperature >= 45 )); then
-    echo "255 96 0"
-  elif (( temperature >= 40 )); then
-    echo "255 220 0"
-  elif (( temperature >= 30 )); then
-    echo "0 255 0"
-  else
+  elif (( temperature < 30 )); then
     echo "0 96 255"
+  elif (( temperature < 35 )); then
+    blue=$(((35 - temperature) * 51))
+    echo "0 255 $blue"
+  elif (( temperature < 40 )); then
+    red=$(((temperature - 35) * 51))
+    echo "$red 255 0"
+  elif (( temperature < 45 )); then
+    green=$((220 - (temperature - 40) * 25))
+    echo "255 $green 0"
+  else
+    green=$((96 - (temperature - 45) * 19))
+    echo "255 $green 0"
   fi
 }
 

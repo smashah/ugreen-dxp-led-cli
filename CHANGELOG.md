@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.2 - 2026-08-06
+
+- Use a continuous temperature gradient so healthy bays at different temperatures remain visually distinct.
+
 ## 0.3.1 - 2026-08-06
 
 - Make the Linux priority integration harness model systemd `Type=simple` service starts asynchronously, avoiding a test-only lock deadlock.

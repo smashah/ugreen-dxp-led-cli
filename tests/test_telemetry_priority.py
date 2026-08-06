@@ -156,7 +156,7 @@ class TelemetryPriorityTest(unittest.TestCase):
             text=True,
             env={**os.environ, "UGREEN_LED_SKIP_SYSTEMD": "1", "UGREEN_LED_ONCE": "1"},
         )
-        self.assertEqual(["0", "255", "0"], self.disk1_state()[3:6])
+        self.assertEqual(["0", "255", "51"], self.disk1_state()[3:6])
         self.assertEqual("131", self.disk1_state()[2])
 
         self.post(
@@ -176,9 +176,9 @@ class TelemetryPriorityTest(unittest.TestCase):
             time.sleep(0.05)
         else:
             self.fail("resolved notification did not finish")
-        self.wait_for_disk1_color(["255", "96", "0"])
+        self.wait_for_disk1_color(["255", "58", "0"])
         time.sleep(0.2)
-        self.assertEqual(["255", "96", "0"], self.disk1_state()[3:6])
+        self.assertEqual(["255", "58", "0"], self.disk1_state()[3:6])
 
 
 if __name__ == "__main__":

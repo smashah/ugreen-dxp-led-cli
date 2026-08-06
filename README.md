@@ -167,9 +167,11 @@ With fresh Unraid telemetry, the default six LEDs provide an array dashboard:
 | `netdev` | Link speed color when the default gateway answers; red when it does not. |
 | `disk1`–`disk4` | Corresponding Unraid bay temperature and health. Brightness rises with array usage. |
 
-Disk temperature colors are blue below 30°C, green from 30–39°C, yellow from
-40–44°C, orange from 45–49°C, and red at 50°C or above. A missing or failed
-disk is red, unknown health is purple, and unavailable temperature is cyan.
+Disk temperatures move along a continuous gradient: blue below 30°C, cyan at
+30°C, green at 35°C, yellow at 40°C, orange at 45°C, and red at 50°C or above.
+That makes small differences between healthy bays visible instead of painting
+the whole 30–39°C range identically. A missing or failed disk is red, unknown
+health is purple, and unavailable temperature is cyan.
 Telemetry expires after 90 seconds by default; stale disk data becomes dim blue
 instead of continuing to claim a healthy temperature. Temporary effects and
 notifications preempt this display, then restore the latest telemetry state.
