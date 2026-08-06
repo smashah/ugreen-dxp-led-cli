@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.1 - 2026-08-06
+
+- Make the Linux priority integration harness model systemd `Type=simple` service starts asynchronously, avoiding a test-only lock deadlock.
+
 ## 0.3.0 - 2026-08-06
 
 - Add authenticated `POST`/`GET /v1/telemetry` endpoints for Unraid array and disk data.

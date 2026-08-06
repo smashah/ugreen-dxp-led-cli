@@ -50,7 +50,7 @@ class TelemetryPriorityTest(unittest.TestCase):
             "  stop) printf 'inactive\\n' > \"$UGREEN_LED_FAKE_SERVICE_STATE\" ;;\n"
             "  start|restart)\n"
             "    printf 'active\\n' > \"$UGREEN_LED_FAKE_SERVICE_STATE\"\n"
-            "    UGREEN_LED_SKIP_SYSTEMD=1 UGREEN_LED_ONCE=1 \"$UGREEN_LED_REAL_COMMAND\" mode resources >/dev/null\n"
+            "    (UGREEN_LED_SKIP_SYSTEMD=1 UGREEN_LED_ONCE=1 \"$UGREEN_LED_REAL_COMMAND\" mode resources >/dev/null 2>&1) &\n"
             "    ;;\n"
             "  *) exit 2 ;;\n"
             "esac\n"
