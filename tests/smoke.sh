@@ -13,6 +13,7 @@ export UGREEN_LED_BACKEND="$repository_root/tests/fake-backend.sh"
 export UGREEN_LED_MANUAL_FILE="$temporary/manual.tsv"
 export UGREEN_LED_LOCK="$temporary/lock"
 export UGREEN_LED_FAKE_STATE="$temporary/state.tsv"
+export UGREEN_LED_TELEMETRY_FILE="$temporary/telemetry.env"
 
 cp "$repository_root/config.example" "$UGREEN_LED_CONFIG"
 
@@ -46,7 +47,6 @@ grep -q $'^disk2\ton\t140\t255\t200\t0\t400\t800$' "$UGREEN_LED_FAKE_STATE"
 grep -q $'^disk3\ton\t140\t255\t96\t0\t0\t0$' "$UGREEN_LED_FAKE_STATE"
 grep -q $'^disk4\ton\t140\t255\t0\t0\t0\t0$' "$UGREEN_LED_FAKE_STATE"
 
-export UGREEN_LED_TELEMETRY_FILE="$temporary/telemetry.env"
 telemetry_now="$(date +%s)"
 cat > "$UGREEN_LED_TELEMETRY_FILE" <<EOF
 UGREEN_TELEMETRY_RECEIVED_AT=$telemetry_now
